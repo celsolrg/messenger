@@ -1,0 +1,39 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use App\Models\User;
+use App\Http\Controllers\ContactController;
+use App\Http\Controllers\CampaignController;
+
+// LOGIN (SEM AUTH)
+
+Route::middleware('auth:sanctum')->get('/me', function (Request $request) {
+    return $request->user();
+});
+
+Route::post('/login', function (Request $request) {
+
+    $user = User::where('email', $request->email)->first();
+
+    if (!$user || !Hash::check($request->password, $user->password)) {
+        return response()->json(['error' => 'Credenciais inválidas'], 401);
+    }
+
+    return response()->json([
+        'token' => $user->createToken('api')->plainTextToken
+    ]);
+});
+
+// ROTAS PROTEGIDAS
+Route::middleware('auth:sanctum')->group(function () {
+
+    Route::get('/contacts', [ContactController::class, 'index']);
+    Route::post('/contacts', [ContactController::class, 'store']);
+    Route::put('/contacts/{id}', [ContactController::class, 'update']);
+    Route::delete('/contacts/{id}', [ContactController::class, 'destroy']);
+
+    Route::get('/campaigns', [CampaignController::class, 'index']);
+    Route::post('/campaigns', [CampaignController::class, 'store']);
+    Route::post('/campaigns/{id}/send', [CampaignController::class, 'send']);
+});
