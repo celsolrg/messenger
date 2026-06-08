@@ -1,5 +1,4 @@
 async function checkAuth() {
-
     const token = localStorage.getItem("token");
 
     if (!token) {
@@ -8,26 +7,46 @@ async function checkAuth() {
     }
 
     try {
-
         const res = await fetch('/api/me', {
             headers: {
-                Authorization: 'Bearer ' + token
+                'Authorization': 'Bearer ' + token,
+                'Accept': 'application/json'
             }
         });
 
+        if (res.status === 401) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            window.location.href = "/login";
+            return;
+        }
+
         if (!res.ok) {
-            throw new Error();
+            console.error("Erro ao validar /api/me:", res.status, await res.text());
+            return;
         }
 
         document.body.style.display = 'block';
 
-        await loadContacts();
-        await loadCampaigns();
+    } catch (e) {
+        console.error("Falha no checkAuth:", e);
+        return;
+    }
 
-    } catch {
+    try {
+        if (typeof loadContacts === "function") {
+            await loadContacts();
+        }
+    } catch (e) {
+        console.error("Erro em loadContacts:", e);
+    }
 
-        localStorage.removeItem("token");
-        window.location.href = "/login";
+    try {
+        if (typeof loadCampaigns === "function") {
+            await loadCampaigns();
+        }
+    } catch (e) {
+        console.error("Erro em loadCampaigns:", e);
     }
 }
 

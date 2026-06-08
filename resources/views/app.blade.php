@@ -19,9 +19,9 @@
         </div>
 
         <nav class="flex-1 p-4 space-y-2">
-            <a href="#" class="block px-4 py-3 rounded bg-blue-600 font-semibold">Dashboard</a>
-            <a href="#contatos" class="block px-4 py-3 rounded hover:bg-slate-800">Contatos</a>
-            <a href="#campanhas" class="block px-4 py-3 rounded hover:bg-slate-800">Campanhas</a>
+            <a href="/" class="block px-4 py-3 rounded bg-blue-600 font-semibold">Dashboard</a>
+            <a href="/contatos" class="block px-4 py-3 rounded hover:bg-slate-800">Contatos</a>
+	    <a href="/campanhas" class="block px-4 py-3 rounded hover:bg-slate-800">Campanhas</a>
             <a href="#mensagens" class="block px-4 py-3 rounded hover:bg-slate-800">Fila de Envios</a>
             <a href="#whatsapp" class="block px-4 py-3 rounded hover:bg-slate-800">WhatsApp</a>
         </nav>
@@ -40,12 +40,19 @@
         <div class="flex justify-between items-center mb-6">
             <div>
                 <h2 class="text-2xl font-bold">Dashboard</h2>
-                <p class="text-sm text-slate-500">Gerenciamento de contatos, campanhas e envios</p>
+                <p class="text-sm text-slate-500">Gerenciamento de campanhas e envios</p>
             </div>
 
-            <button onclick="logout()" class="md:hidden text-red-600 font-semibold">
-                Sair
-            </button>
+            <div class="flex gap-2">
+                <a href="/contatos"
+                   class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold">
+                    Ver contatos
+                </a>
+
+                <button onclick="logout()" class="md:hidden text-red-600 font-semibold">
+                    Sair
+                </button>
+            </div>
         </div>
 
         <!-- CARDS -->
@@ -71,67 +78,37 @@
             </div>
         </div>
 
-        <!-- CONTATOS -->
-	<section id="contatos" class="bg-white p-6 rounded-xl shadow-sm border mb-6">
-	    <div class="flex justify-between items-center mb-4">
-	        <div>
-	            <h2 class="text-lg font-bold">Contatos</h2>
-	            <p class="text-sm text-slate-500">Importe contatos via texto ou planilha Excel</p>
-	        </div>
-	    </div>
+        <!-- ATALHOS -->
+        <section class="bg-white p-6 rounded-xl shadow-sm border mb-6">
+            <h2 class="text-lg font-bold mb-1">Ações rápidas</h2>
+            <p class="text-sm text-slate-500 mb-4">Acesse rapidamente as principais áreas do sistema</p>
 
-	    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-	        <div class="border rounded-xl p-4 bg-slate-50">
-	            <h3 class="font-semibold mb-2">Importar por texto</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-	            <textarea id="csvInput"
-	                placeholder="55999999999,João"
-	                class="w-full border border-slate-300 p-3 mb-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                <a href="/contatos"
+                   class="block border rounded-xl p-5 bg-slate-50 hover:bg-slate-100">
+                    <h3 class="font-bold text-slate-800">Contatos</h3>
+                    <p class="text-sm text-slate-500 mt-1">
+                        Visualizar, buscar, filtrar, cadastrar e importar contatos.
+                    </p>
+                </a>
 
-	            <button id="btnImport"
-	                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold">
-	                Importar texto
-	            </button>
-	        </div>
+                <a href="/campanhas"
+                   class="block border rounded-xl p-5 bg-slate-50 hover:bg-slate-100">
+                    <h3 class="font-bold text-slate-800">Campanhas</h3>
+                    <p class="text-sm text-slate-500 mt-1">
+                        Criar campanhas e preparar mensagens para envio.
+                    </p>
+                </a>
 
-	        <div class="border rounded-xl p-4 bg-slate-50">
-	            <h3 class="font-semibold mb-2">Importar Excel</h3>
-
-	            <input id="excelFile"
-	                type="file"
-	                accept=".xlsx,.xls,.csv"
-	                class="w-full border border-slate-300 p-3 mb-3 rounded-lg bg-white">
-
-	            <button id="btnImportExcel"
-	                class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-semibold">
-	                Importar planilha
-	            </button>
-
-		            <div id="excelImportResult" class="mt-3 text-sm text-slate-600"></div>
-		        </div>
-		    </div>
-
-		    <div id="contactsList" class="mt-5 space-y-2"></div>
-		</section>
-
-        <!-- CAMPANHAS -->
-        <section id="campanhas" class="bg-white p-6 rounded-xl shadow-sm border mb-6">
-            <h2 class="text-lg font-bold mb-1">Campanhas</h2>
-            <p class="text-sm text-slate-500 mb-4">Crie campanhas usando variáveis como @{{name}}</p>
-            <input id="campaignName"
-                placeholder="Nome da campanha"
-                class="border border-slate-300 p-3 w-full mb-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-
-            <textarea id="campaignMessage"
-                placeholder="Mensagem. Exemplo: Olá @{{name}}, tudo bem?"
-                class="border border-slate-300 p-3 w-full mb-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
-
-            <button onclick="createCampaign()"
-                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold">
-                Criar campanha
-            </button>
-
-            <div id="campaignsList" class="mt-5 space-y-2"></div>
+                <a href="#mensagens"
+                   class="block border rounded-xl p-5 bg-slate-50 hover:bg-slate-100">
+                    <h3 class="font-bold text-slate-800">Fila de Envios</h3>
+                    <p class="text-sm text-slate-500 mt-1">
+                        Acompanhar status das mensagens geradas.
+                    </p>
+                </a>
+            </div>
         </section>
 
         <!-- FILA -->
@@ -158,7 +135,6 @@
 </div>
 
 <script src="/js/api.js"></script>
-<script src="/js/contacts.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/campaigns.js"></script>
 

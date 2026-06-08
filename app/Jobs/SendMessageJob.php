@@ -3,46 +3,39 @@
 namespace App\Jobs;
 
 use App\Models\Message;
+use App\Services\EvolutionApiService;
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Throwable;
 
 class SendMessageJob implements ShouldQueue
 {
-    use Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected int $messageId;
+    public int $messageId;
 
     public function __construct(int $messageId)
     {
         $this->messageId = $messageId;
     }
 
-    public function handle(): void
+    public function handle(EvolutionApiService $evolution)
     {
         $message = Message::find($this->messageId);
 
-        if (!$message) {
-            return;
-        }
-
-        if ($message->status === 'sent') {
+            if (!$message) {
             return;
         }
 
         try {
             $message->update([
-                'status' => 'processing',
+                'status' => 'sending',
                 'error' => null,
             ]);
 
-            /*
-             * Aqui entra o envio real pelo WhatsApp.
-             * Por enquanto, vamos simular sucesso.
-             */
-
-            sleep(rand(1, 3));
+            $evolution->sendText($message->phone, $message->message);
 
             $message->update([
                 'status' => 'sent',
@@ -50,13 +43,10 @@ class SendMessageJob implements ShouldQueue
                 'error' => null,
             ]);
 
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             $message->update([
                 'status' => 'failed',
                 'error' => $e->getMessage(),
             ]);
-
-            throw $e;
         }
     }
-}
