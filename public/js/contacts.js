@@ -9,6 +9,11 @@ function getValue(id) {
     return el ? el.value.trim() : "";
 }
 
+function setValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value ?? "";
+}
+
 function clearFields(ids) {
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -20,8 +25,37 @@ function getContactName(c) {
     return c.nome || c.name || "-";
 }
 
+function getPrimaryPhone(c) {
+    if (c.phones && c.phones.length) {
+        const principal = c.phones.find(p => p.principal);
+        return principal || c.phones[0];
+    }
+
+    return null;
+}
+
 function getContactPhone(c) {
+    const p = getPrimaryPhone(c);
+
+    if (p) {
+        return `${p.ddd || ""}${p.telefone || ""}`;
+    }
+
     return c.telefone || c.phone || "-";
+}
+
+function getContactDdd(c) {
+    const p = getPrimaryPhone(c);
+    return p?.ddd || c.ddd || "";
+}
+
+function getContactPhoneOnly(c) {
+    const p = getPrimaryPhone(c);
+    return p?.telefone || c.phone || c.telefone || "";
+}
+
+function getContactUf(c) {
+    return c.uf || c.estado || "";
 }
 
 // =========================
@@ -62,13 +96,25 @@ function renderContacts() {
         div.innerHTML = `
             <div>
                 <strong>${getContactName(c)}</strong><br>
-                <small class="text-slate-500">${getContactPhone(c)}</small>
+                <small class="text-slate-500">
+                    CPF: ${c.cpf || "-"} | Tel: ${getContactPhone(c)}
+                </small><br>
+                <small class="text-slate-400">
+                    ${c.cidade || ""} ${getContactUf(c) || ""}
+                </small>
             </div>
 
-            <button onclick="deleteContact(${c.id})"
-                class="text-red-600 hover:text-red-800 font-bold">
-                Remover
-            </button>
+            <div class="flex gap-2">
+                <button onclick="openEditContact(${c.id})"
+                    class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
+                    Editar
+                </button>
+
+                <button onclick="deleteContact(${c.id})"
+                    class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm">
+                    Remover
+                </button>
+            </div>
         `;
 
         container.appendChild(div);
@@ -86,6 +132,7 @@ async function createContact() {
         email: getValue("contactEmail"),
         cpf: getValue("contactCpf"),
         cidade: getValue("contactCidade"),
+        uf: getValue("contactEstado"),
         estado: getValue("contactEstado"),
         tag: getValue("contactTag"),
         opt_in: true,
@@ -115,6 +162,76 @@ async function createContact() {
     await loadContacts();
 
     alert("Contato cadastrado com sucesso!");
+}
+
+// =========================
+// EDIT
+// =========================
+
+function openEditContact(id) {
+    const contact = contacts.find(c => c.id === id);
+
+    if (!contact) {
+        alert("Contato não encontrado.");
+        return;
+    }
+
+    setValue("editContactId", contact.id);
+    setValue("editContactNome", getContactName(contact));
+    setValue("editContactCpf", contact.cpf || "");
+    setValue("editContactDdd", getContactDdd(contact));
+    setValue("editContactTelefone", getContactPhoneOnly(contact));
+    setValue("editContactEmail", contact.email || "");
+    setValue("editContactCidade", contact.cidade || "");
+    setValue("editContactEstado", getContactUf(contact));
+    setValue("editContactBairro", contact.bairro || "");
+    setValue("editContactAddress", contact.address || "");
+    setValue("editContactCep", contact.cep || "");
+
+    const modal = document.getElementById("editContactModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeEditContact() {
+    const modal = document.getElementById("editContactModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function updateContact() {
+    const id = getValue("editContactId");
+
+    if (!id) {
+        alert("Contato inválido.");
+        return;
+    }
+
+    const payload = {
+        name: getValue("editContactNome"),
+        cpf: getValue("editContactCpf"),
+        ddd: getValue("editContactDdd"),
+        phone: getValue("editContactTelefone"),
+        email: getValue("editContactEmail"),
+        cidade: getValue("editContactCidade"),
+        uf: getValue("editContactEstado"),
+        bairro: getValue("editContactBairro"),
+        address: getValue("editContactAddress"),
+        cep: getValue("editContactCep")
+    };
+
+    if (!payload.name || !payload.phone) {
+        alert("Informe pelo menos nome e telefone.");
+        return;
+    }
+
+    await api("/contacts/" + id, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+    });
+
+    closeEditContact();
+    await loadContacts();
+
+    alert("Contato atualizado com sucesso!");
 }
 
 // =========================
@@ -224,6 +341,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnImport = document.getElementById("btnImport");
     const btnExcel = document.getElementById("btnImportExcel");
     const btnCreate = document.getElementById("btnCreateContact");
+    const btnSaveEdit = document.getElementById("btnSaveEditContact");
+    const btnCancelEdit = document.getElementById("btnCancelEditContact");
 
     if (btnCreate) {
         btnCreate.onclick = async () => {
@@ -231,9 +350,24 @@ document.addEventListener("DOMContentLoaded", () => {
                 await createContact();
             } catch (e) {
                 console.error(e);
-                alert("Erro ao cadastrar contato.");
+                alert(e.message || "Erro ao cadastrar contato.");
             }
         };
+    }
+
+    if (btnSaveEdit) {
+        btnSaveEdit.onclick = async () => {
+            try {
+                await updateContact();
+            } catch (e) {
+                console.error(e);
+                alert(e.message || "Erro ao atualizar contato.");
+            }
+        };
+    }
+
+    if (btnCancelEdit) {
+        btnCancelEdit.onclick = closeEditContact;
     }
 
     if (btnImport) {

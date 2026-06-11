@@ -1,33 +1,113 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <title>Novo Contato</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 p-6">
-<div class="max-w-3xl mx-auto bg-white rounded shadow p-6">
-    <h1 class="text-2xl font-bold mb-4">Novo Contato</h1>
 
-    @if($errors->any())
-        <div class="bg-red-100 text-red-800 p-3 rounded mb-4">{{ $errors->first() }}</div>
-    @endif
+<body class="bg-slate-100 p-6">
 
-    <form method="POST" action="{{ route('contacts.store') }}" class="grid grid-cols-2 gap-4">
-        @csrf
-        <input name="nome" placeholder="Nome" class="border p-2 rounded col-span-2" required>
-        <input name="cpf" placeholder="CPF" class="border p-2 rounded">
-        <input name="ddd" placeholder="DDD" class="border p-2 rounded">
-        <input name="telefone" placeholder="Telefone" class="border p-2 rounded">
-        <input name="cidade" placeholder="Cidade" class="border p-2 rounded">
-        <input name="uf" placeholder="UF" maxlength="2" class="border p-2 rounded">
-        <input name="bairro" placeholder="Bairro" class="border p-2 rounded">
-        <input name="cep" placeholder="CEP" class="border p-2 rounded">
-        <div class="col-span-2 flex gap-2">
-            <button class="bg-green-600 text-white px-4 py-2 rounded">Salvar</button>
-            <a href="{{ route('contacts.index') }}" class="bg-gray-500 text-white px-4 py-2 rounded">Voltar</a>
+<div class="max-w-3xl mx-auto bg-white rounded-xl shadow p-6">
+
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800">Novo Contato</h1>
+            <p class="text-sm text-slate-500">Cadastro manual via API</p>
+        </div>
+
+        <a href="/contatos" class="bg-slate-700 text-white px-4 py-2 rounded-lg">
+            Voltar
+        </a>
+    </div>
+
+    <div id="result" class="hidden mb-4 p-3 rounded"></div>
+
+    <form id="contactForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input id="name" placeholder="Nome" class="border p-2 rounded md:col-span-2" required>
+        <input id="phone" placeholder="Telefone" class="border p-2 rounded" required>
+        <input id="email" placeholder="E-mail" class="border p-2 rounded">
+        <input id="cpf" placeholder="CPF" class="border p-2 rounded">
+        <input id="cidade" placeholder="Cidade" class="border p-2 rounded">
+        <input id="estado" placeholder="UF" maxlength="2" class="border p-2 rounded">
+        <input id="tag" placeholder="Tag" class="border p-2 rounded">
+
+        <div class="md:col-span-2 flex gap-2">
+            <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">
+                Salvar
+            </button>
+
+            <a href="/contatos" class="bg-gray-500 text-white px-4 py-2 rounded">
+                Cancelar
+            </a>
         </div>
     </form>
+
 </div>
+
+<script>
+document.getElementById("contactForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+        window.location.href = "/login";
+        return;
+    }
+
+    const payload = {
+        name: document.getElementById("name").value.trim(),
+        phone: document.getElementById("phone").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        cpf: document.getElementById("cpf").value.trim(),
+        cidade: document.getElementById("cidade").value.trim(),
+        estado: document.getElementById("estado").value.trim(),
+        tag: document.getElementById("tag").value.trim(),
+        opt_in: true,
+        ativo: true
+    };
+
+    const result = document.getElementById("result");
+
+    try {
+        const res = await fetch("/api/contacts", {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + token,
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const text = await res.text();
+
+        if (res.status === 401) {
+            localStorage.removeItem("token");
+            window.location.href = "/login";
+            return;
+        }
+
+        if (!res.ok) {
+            result.className = "mb-4 p-3 rounded bg-red-100 text-red-700";
+            result.innerHTML = "Erro ao salvar contato:<br>" + text;
+            return;
+        }
+
+        result.className = "mb-4 p-3 rounded bg-green-100 text-green-700";
+        result.innerHTML = "Contato salvo com sucesso.";
+
+        setTimeout(() => {
+            window.location.href = "/contatos";
+        }, 800);
+
+    } catch (error) {
+        result.className = "mb-4 p-3 rounded bg-red-100 text-red-700";
+        result.innerHTML = "Erro de conexão.";
+    }
+});
+</script>
+
 </body>
 </html>

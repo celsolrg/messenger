@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContactImportController;
+use App\Http\Controllers\WhatsappConnectionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,17 +39,32 @@ Route::get('/campanhas', function () {
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['auth'])->group(function () {
+Route::get('/contatos/novo', [ContactController::class, 'create'])
+    ->name('contacts.create');
 
-    Route::get('/contatos/novo', [ContactController::class, 'create'])
-        ->name('contacts.create');
+Route::post('/contatos', [ContactController::class, 'store'])
+    ->name('contacts.store');
 
-    Route::post('/contatos', [ContactController::class, 'store'])
-        ->name('contacts.store');
+Route::get('/contatos/importar', [ContactImportController::class, 'form'])
+    ->name('contacts.import.form');
 
-    Route::get('/contatos/importar', [ContactImportController::class, 'form'])
-        ->name('contacts.import.form');
+Route::post('/contatos/importar', [ContactImportController::class, 'import'])
+    ->name('contacts.import');
 
-    Route::post('/contatos/importar', [ContactImportController::class, 'import'])
-        ->name('contacts.import');
-});
+/*
+|--------------------------------------------------------------------------
+| Rotas WhatsappConnection
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/whatsapp', [WhatsappConnectionController::class, 'index'])
+    ->name('whatsapp.index');
+
+Route::get('/whatsapp/status', [WhatsappConnectionController::class, 'status'])
+    ->name('whatsapp.status');
+
+Route::post('/whatsapp/create', [WhatsappConnectionController::class, 'create'])
+    ->name('whatsapp.create');
+
+Route::get('/whatsapp/qrcode', [WhatsappConnectionController::class, 'qrcode'])
+    ->name('whatsapp.qrcode');

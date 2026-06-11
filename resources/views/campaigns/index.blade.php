@@ -13,7 +13,7 @@
     <div class="flex justify-between items-center mb-6">
         <div>
             <h1 class="text-2xl font-bold text-slate-800">Campanhas</h1>
-            <p class="text-sm text-slate-500">Criar, visualizar e excluir campanhas</p>
+            <p class="text-sm text-slate-500">Criar, visualizar, editar, copiar e excluir campanhas</p>
         </div>
 
         <a href="/" class="bg-slate-700 text-white px-4 py-2 rounded-lg hover:bg-slate-800">
@@ -22,7 +22,15 @@
     </div>
 
     <div class="bg-white rounded-xl shadow p-5 mb-6">
-        <h2 class="text-lg font-bold mb-4">Nova campanha</h2>
+        <div class="flex justify-between items-center mb-4">
+            <h2 id="formTitle" class="text-lg font-bold">Nova campanha</h2>
+
+            <button id="cancelEditBtn"
+                    onclick="cancelEditCampaignPage()"
+                    class="hidden bg-slate-500 hover:bg-slate-600 text-white px-4 py-2 rounded-lg">
+                Cancelar edição
+            </button>
+        </div>
 
         <input id="campaignName"
                placeholder="Nome da campanha"
@@ -43,6 +51,8 @@
                 Arquivo da campanha
             </label>
 
+            <div id="currentMediaInfo" class="hidden text-sm text-slate-600 mb-2 bg-slate-50 border rounded-lg p-2"></div>
+
             <input id="campaignMedia"
                    type="file"
                    class="border rounded-lg p-3 w-full bg-white">
@@ -52,7 +62,8 @@
                   placeholder="Mensagem. Exemplo: Olá @{{name}}, tudo bem?"
                   class="border rounded-lg p-3 w-full mb-3"></textarea>
 
-        <button onclick="createCampaignPage()"
+        <button id="saveCampaignBtn"
+                onclick="saveCampaignPage()"
                 class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold">
             Criar campanha
         </button>
@@ -85,19 +96,40 @@
 </div>
 
 <script>
+let editingCampaignId = null;
+let editingCampaignHasMedia = false;
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
 function toggleMediaInput() {
     const type = document.getElementById("campaignType").value;
     const mediaBox = document.getElementById("mediaBox");
     const mediaInput = document.getElementById("campaignMedia");
+    const currentMediaInfo = document.getElementById("currentMediaInfo");
 
     if (type === "text") {
         mediaBox.classList.add("hidden");
         mediaInput.value = "";
         mediaInput.removeAttribute("accept");
+        currentMediaInfo.classList.add("hidden");
+        currentMediaInfo.innerHTML = "";
         return;
     }
 
     mediaBox.classList.remove("hidden");
+
+    if (editingCampaignId && editingCampaignHasMedia) {
+        currentMediaInfo.classList.remove("hidden");
+    } else {
+        currentMediaInfo.classList.add("hidden");
+    }
 
     if (type === "image") {
         mediaInput.setAttribute("accept", "image/*");
@@ -161,54 +193,54 @@ async function loadCampaignsPage() {
 
     campaigns.forEach(c => {
         const media = c.media && c.media.length > 0 ? c.media[0] : null;
+        const campaignJson = encodeURIComponent(JSON.stringify(c));
 
         tbody.innerHTML += `
             <tr class="border-b hover:bg-slate-50">
-                <td class="p-3 font-semibold">${c.name || "-"}</td>
-                <td class="p-3">${formatCampaignType(c.type)}</td>
-                <td class="p-3">${c.message || "-"}</td>
-                <td class="p-3">${media ? media.file_name : "-"}</td>
+                <td class="p-3 font-semibold">${escapeHtml(c.name || "-")}</td>
+                <td class="p-3">${escapeHtml(formatCampaignType(c.type))}</td>
+                <td class="p-3">${escapeHtml(c.message || "-")}</td>
+                <td class="p-3">${media ? escapeHtml(media.file_name) : "-"}</td>
                 <td class="p-3 text-center">
+                    <div class="flex gap-2 justify-center flex-wrap">
+                        <button onclick="editCampaignPage('${campaignJson}')"
+                                class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded">
+                            Editar
+                        </button>
 
+                        <button onclick="copyCampaignPage(${c.id})"
+                                class="bg-slate-600 hover:bg-slate-700 text-white px-3 py-1 rounded">
+                            Copiar
+                        </button>
 
-
-		<div class="flex gap-2 justify-center">
-		    <button onclick='editCampaignPage(${JSON.stringify(c)})'
-		            class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded">
-		        Editar
-		    </button>
-
-		    <button onclick="copyCampaignPage(${c.id})"
-		            class="bg-slate-600 hover:bg-slate-700 text-white px-3 py-1 rounded">
-		        Copiar
-		    </button>
-
-		    <button onclick="deleteCampaignPage(${c.id})"
-		            class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">
-		        Excluir
-		    </button>
-		</div>
+                        <button onclick="deleteCampaignPage(${c.id})"
+                                class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">
+                            Excluir
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
     });
 }
 
-async function createCampaignPage() {
+async function saveCampaignPage() {
     const token = localStorage.getItem("token");
 
-    const name = document.getElementById("campaignName").value;
+    const name = document.getElementById("campaignName").value.trim();
     const type = document.getElementById("campaignType").value;
     const message = document.getElementById("campaignMessage").value;
     const media = document.getElementById("campaignMedia").files[0];
     const result = document.getElementById("campaignResult");
+
+    result.innerHTML = "";
 
     if (!name) {
         result.innerHTML = `<span class="text-red-600">Informe o nome da campanha.</span>`;
         return;
     }
 
-    if (type !== "text" && !media) {
+    if (type !== "text" && !media && !editingCampaignHasMedia) {
         result.innerHTML = `<span class="text-red-600">Selecione o arquivo da campanha.</span>`;
         return;
     }
@@ -222,7 +254,16 @@ async function createCampaignPage() {
         formData.append("media", media);
     }
 
-    const res = await fetch("/api/campaigns", {
+    let url = "/api/campaigns";
+    let successMessage = "Campanha criada com sucesso.";
+
+    if (editingCampaignId) {
+        url = `/api/campaigns/${editingCampaignId}`;
+        formData.append("_method", "PUT");
+        successMessage = "Campanha atualizada com sucesso.";
+    }
+
+    const res = await fetch(url, {
         method: "POST",
         headers: {
             "Authorization": "Bearer " + token,
@@ -231,14 +272,14 @@ async function createCampaignPage() {
         body: formData
     });
 
-     if (!res.ok) {
-        let errorMessage = "Erro ao criar campanha.";
+    if (!res.ok) {
+        let errorMessage = "Erro ao salvar campanha.";
 
         try {
             const errorJson = await res.json();
 
             if (errorJson.message) {
-                 errorMessage = errorJson.message;
+                errorMessage = errorJson.message;
             }
 
             if (errorJson.errors) {
@@ -249,19 +290,90 @@ async function createCampaignPage() {
             }
         } catch (e) {
             errorMessage = await res.text();
-       }
+        }
 
-        result.innerHTML = `<span class="text-red-600">${errorMessage}</span>`;
+        result.innerHTML = `<span class="text-red-600">${escapeHtml(errorMessage)}</span>`;
         return;
     }
+
+    resetCampaignForm();
+    result.innerHTML = `<span class="text-green-700">${successMessage}</span>`;
+
+    loadCampaignsPage();
+}
+
+function editCampaignPage(encodedCampaign) {
+    const campaign = JSON.parse(decodeURIComponent(encodedCampaign));
+    const media = campaign.media && campaign.media.length > 0 ? campaign.media[0] : null;
+
+    editingCampaignId = campaign.id;
+    editingCampaignHasMedia = !!media;
+
+    document.getElementById("formTitle").innerText = "Editar campanha";
+    document.getElementById("saveCampaignBtn").innerText = "Salvar alterações";
+    document.getElementById("cancelEditBtn").classList.remove("hidden");
+
+    document.getElementById("campaignName").value = campaign.name || "";
+    document.getElementById("campaignType").value = campaign.type || "text";
+    document.getElementById("campaignMessage").value = campaign.message || "";
+    document.getElementById("campaignMedia").value = "";
+
+    const currentMediaInfo = document.getElementById("currentMediaInfo");
+
+    if (media) {
+        currentMediaInfo.innerHTML = `Arquivo atual: <strong>${escapeHtml(media.file_name)}</strong><br><span class="text-xs">Selecione outro arquivo apenas se desejar substituir.</span>`;
+    } else {
+        currentMediaInfo.innerHTML = "";
+    }
+
+    toggleMediaInput();
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelEditCampaignPage() {
+    resetCampaignForm();
+    document.getElementById("campaignResult").innerHTML = "";
+}
+
+function resetCampaignForm() {
+    editingCampaignId = null;
+    editingCampaignHasMedia = false;
+
+    document.getElementById("formTitle").innerText = "Nova campanha";
+    document.getElementById("saveCampaignBtn").innerText = "Criar campanha";
+    document.getElementById("cancelEditBtn").classList.add("hidden");
 
     document.getElementById("campaignName").value = "";
     document.getElementById("campaignMessage").value = "";
     document.getElementById("campaignType").value = "text";
     document.getElementById("campaignMedia").value = "";
-    toggleMediaInput();
 
-    result.innerHTML = `<span class="text-green-700">Campanha criada com sucesso.</span>`;
+    document.getElementById("currentMediaInfo").classList.add("hidden");
+    document.getElementById("currentMediaInfo").innerHTML = "";
+
+    toggleMediaInput();
+}
+
+async function copyCampaignPage(id) {
+    if (!confirm("Deseja copiar esta campanha?")) {
+        return;
+    }
+
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`/api/campaigns/${id}/copy`, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json"
+        }
+    });
+
+    if (!res.ok) {
+        alert("Erro ao copiar campanha.");
+        return;
+    }
 
     loadCampaignsPage();
 }

@@ -43,19 +43,7 @@ class CampaignController extends Controller
             'user_id' => Auth::id(),
         ]);
 
-        if ($request->hasFile('media')) {
-            $file = $request->file('media');
-            $path = $file->store('campaigns', 'public');
-
-            CampaignMedia::create([
-                'campaign_id' => $campaign->id,
-                'media_type' => $request->type,
-                'file_name' => $file->getClientOriginalName(),
-                'file_path' => $path,
-                'mime_type' => $file->getMimeType(),
-                'file_size' => $file->getSize(),
-            ]);
-        }
+        $this->saveMediaIfExists($request, $campaign);
 
         return response()->json([
             'message' => 'Campanha criada com sucesso.',
@@ -63,86 +51,85 @@ class CampaignController extends Controller
         ], 201);
     }
 
-public function update(Request $request, $id)
-{
-    $campaign = Campaign::where('user_id', Auth::id())->findOrFail($id);
+    public function update(Request $request, $id)
+    {
+        $campaign = Campaign::where('user_id', Auth::id())->findOrFail($id);
 
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'message' => 'nullable|string',
-        'type' => 'required|string|in:text,image,video,audio,document',
-        'media' => 'nullable|file|max:51200',
-    ]);
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'message' => 'nullable|string',
+            'type' => 'required|string|in:text,image,video,audio,document',
+            'media' => 'nullable|file|max:51200',
+        ]);
 
-    $campaign->update([
-        'name' => $request->name,
-        'message' => $request->message,
-        'type' => $request->type,
-    ]);
+        if ($request->type !== 'text' && !$request->hasFile('media') && $campaign->media()->count() === 0) {
+            return response()->json([
+                'message' => 'Arquivo obrigatório para este tipo de campanha.'
+            ], 422);
+        }
 
-    if ($request->hasFile('media')) {
-        $campaign->media()->delete();
+        $campaign->update([
+            'name' => $request->name,
+            'message' => $request->message,
+            'type' => $request->type,
+        ]);
 
-        $file = $request->file('media');
-        $path = $file->store('campaigns', 'public');
+        if ($request->type === 'text') {
+            $this->deleteCampaignMedia($campaign);
+        }
 
-        CampaignMedia::create([
-            'campaign_id' => $campaign->id,
-            'media_type' => $request->type,
-            'file_name' => $file->getClientOriginalName(),
-            'file_path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'file_size' => $file->getSize(),
+        if ($request->hasFile('media')) {
+            $this->deleteCampaignMedia($campaign);
+            $this->saveMediaIfExists($request, $campaign);
+        }
+
+        return response()->json([
+            'message' => 'Campanha atualizada com sucesso.',
+            'campaign' => $campaign->load('media'),
         ]);
     }
 
-    return response()->json([
-        'message' => 'Campanha atualizada com sucesso.',
-        'campaign' => $campaign->load('media'),
-    ]);
-}
+    public function copy($id)
+    {
+        $campaign = Campaign::with('media')
+            ->where('user_id', Auth::id())
+            ->findOrFail($id);
 
-public function copy($id)
-{
-    $campaign = Campaign::with('media')
-        ->where('user_id', Auth::id())
-        ->findOrFail($id);
-
-    $newCampaign = Campaign::create([
-        'name' => $campaign->name . ' - Cópia',
-        'message' => $campaign->message,
-        'type' => $campaign->type,
-        'user_id' => Auth::id(),
-    ]);
-
-    foreach ($campaign->media as $media) {
-        CampaignMedia::create([
-            'campaign_id' => $newCampaign->id,
-            'media_type' => $media->media_type,
-            'file_name' => $media->file_name,
-            'file_path' => $media->file_path,
-            'mime_type' => $media->mime_type,
-            'file_size' => $media->file_size,
+        $newCampaign = Campaign::create([
+            'name' => $campaign->name . ' - Cópia',
+            'message' => $campaign->message,
+            'type' => $campaign->type,
+            'user_id' => Auth::id(),
         ]);
+
+        foreach ($campaign->media as $media) {
+            CampaignMedia::create([
+                'campaign_id' => $newCampaign->id,
+                'media_type' => $media->media_type,
+                'file_name' => $media->file_name,
+                'file_path' => $media->file_path,
+                'mime_type' => $media->mime_type,
+                'file_size' => $media->file_size,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Campanha copiada com sucesso.',
+            'campaign' => $newCampaign->load('media'),
+        ], 201);
     }
 
-    return response()->json([
-        'message' => 'Campanha copiada com sucesso.',
-        'campaign' => $newCampaign->load('media'),
-    ], 201);
-}
+    public function destroy($id)
+    {
+        $campaign = Campaign::where('user_id', Auth::id())->findOrFail($id);
 
-public function destroy($id)
-{
-    $campaign = Campaign::where('user_id', Auth::id())->findOrFail($id);
+        $this->deleteCampaignMedia($campaign);
+        $campaign->delete();
 
-    $campaign->media()->delete();
-    $campaign->delete();
-
-    return response()->json([
-        'message' => 'Campanha excluída com sucesso.',
-    ]);
-}
+        return response()->json([
+            'message' => 'Campanha excluída com sucesso.',
+        ]);
+    }
 
     public function send($id)
     {
@@ -177,7 +164,6 @@ public function destroy($id)
             ]);
 
             SendMessageJob::dispatch($message->id);
-
             $totalQueued++;
         }
 
@@ -187,6 +173,36 @@ public function destroy($id)
             'total_queued' => $totalQueued,
             'total_skipped' => $totalSkipped,
         ]);
+    }
+
+    private function saveMediaIfExists(Request $request, Campaign $campaign): void
+    {
+        if (!$request->hasFile('media')) {
+            return;
+        }
+
+        $file = $request->file('media');
+        $path = $file->store('campaigns', 'public');
+
+        CampaignMedia::create([
+            'campaign_id' => $campaign->id,
+            'media_type' => $request->type,
+            'file_name' => $file->getClientOriginalName(),
+            'file_path' => $path,
+            'mime_type' => $file->getMimeType(),
+            'file_size' => $file->getSize(),
+        ]);
+    }
+
+    private function deleteCampaignMedia(Campaign $campaign): void
+    {
+        foreach ($campaign->media as $media) {
+            if ($media->file_path) {
+                Storage::disk('public')->delete($media->file_path);
+            }
+
+            $media->delete();
+        }
     }
 
     private function formatPhone(Contact $contact): ?string
@@ -210,12 +226,7 @@ public function destroy($id)
     private function parseMessage(string $message, Contact $contact): string
     {
         return str_replace(
-            [
-                '{{name}}',
-                '{{nome}}',
-                '{{phone}}',
-                '{{telefone}}',
-            ],
+            ['{{name}}', '{{nome}}', '{{phone}}', '{{telefone}}'],
             [
                 $contact->nome ?? '',
                 $contact->nome ?? '',
