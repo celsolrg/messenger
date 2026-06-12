@@ -23,7 +23,7 @@
             <a href="/contatos" class="block px-4 py-3 rounded hover:bg-slate-800">Contatos</a>
 	    <a href="/campanhas" class="block px-4 py-3 rounded hover:bg-slate-800">Campanhas</a>
             <a href="#mensagens" class="block px-4 py-3 rounded hover:bg-slate-800">Fila de Envios</a>
-            <a href="#whatsapp" class="block px-4 py-3 rounded hover:bg-slate-800">WhatsApp</a>
+            <a href="/whatsapp" class="block px-4 py-3 rounded hover:bg-slate-800">WhatsApp</a>
         </nav>
 
         <div class="p-4 border-t border-slate-700">
