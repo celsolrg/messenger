@@ -10,9 +10,13 @@ class Campaign extends Model
         'name',
         'message',
         'type',
-        'file_path',
-        'user_id'
+        'user_id',
     ];
+
+    public function media()
+    {
+        return $this->hasMany(CampaignMedia::class);
+    }
 
     public function messages()
     {

@@ -1,17 +1,24 @@
 <?php
 
-protected function credentials(Request $request)
+namespace App\Http\Controllers\Auth;
+
+use Illuminate\Http\Request;
+
+class LoginController
 {
-    $login = $request->input('login');
+    protected function credentials(Request $request)
+    {
+        $login = $request->input('login');
 
-    $field = filter_var($login, FILTER_VALIDATE_EMAIL)
-        ? 'email'
-        : 'username';
+        $field = filter_var($login, FILTER_VALIDATE_EMAIL)
+            ? 'email'
+            : 'username';
 
-    return [
-        $field => $login,
-        'password' => $request->password,
-        'status' => 'active',
-        'allow_login' => 1,
-    ];
+        return [
+            $field => $login,
+            'password' => $request->password,
+            'status' => 'active',
+            'allow_login' => 1,
+        ];
+    }
 }

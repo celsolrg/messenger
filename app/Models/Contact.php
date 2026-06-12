@@ -40,4 +40,14 @@ class Contact extends Model
         'opt_in' => 'boolean',
         'ativo' => 'boolean',
     ];
+
+	public function phones()
+	{
+	    return $this->hasMany(\App\Models\ContactPhone::class);
+	}
+
+	public function mainPhone()
+	{
+	    return $this->hasOne(\App\Models\ContactPhone::class)->where('principal', true);
+	}
 }

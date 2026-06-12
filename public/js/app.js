@@ -1,52 +1,47 @@
 async function checkAuth() {
     const token = localStorage.getItem("token");
 
+    console.log("TOKEN NO APP:", token);
+
     if (!token) {
-        window.location.href = "/login";
+        console.warn("Sem token, redirecionando login");
+        console.warn("REDIRECT BLOQUEADO PARA DEBUG");
         return;
     }
 
-    try {
-        const res = await fetch('/api/me', {
-            headers: {
-                Authorization: 'Bearer ' + token,
-                Accept: 'application/json'
-            }
-        });
-
-        if (!res.ok) {
-            throw new Error();
+    const res = await fetch('/api/me', {
+        headers: {
+            'Authorization': 'Bearer ' + token,
+            'Accept': 'application/json'
         }
+    });
 
-        document.body.style.display = 'block';
+    console.log("STATUS /api/me:", res.status);
 
-        await loadContacts();
-        await loadCampaigns();
-
-        updateDashboardCards();
-
-    } catch {
-        localStorage.removeItem("token");
-        window.location.href = "/login";
+    if (res.status === 401) {
+        console.error("Token inválido em /api/me");
+        console.log(await res.text());
+        return;
     }
-}
 
-function updateDashboardCards() {
-    const cardContacts = document.getElementById("cardContacts");
-    const cardCampaigns = document.getElementById("cardCampaigns");
-    const cardSent = document.getElementById("cardSent");
-    const cardPending = document.getElementById("cardPending");
+    if (!res.ok) {
+        console.error("Erro /api/me:", res.status, await res.text());
+        return;
+    }
 
-    if (cardContacts) cardContacts.innerText = contacts?.length ?? 0;
-    if (cardCampaigns) cardCampaigns.innerText = campaigns?.length ?? 0;
+    document.body.style.display = 'block';
 
-    if (cardSent) cardSent.innerText = "-";
-    if (cardPending) cardPending.innerText = "-";
-}
+    try {
+        if (typeof loadContacts === "function") await loadContacts();
+    } catch (e) {
+        console.error("Erro loadContacts:", e);
+    }
 
-function logout() {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
+    try {
+        if (typeof loadCampaigns === "function") await loadCampaigns();
+    } catch (e) {
+        console.error("Erro loadCampaigns:", e);
+    }
 }
 
 document.addEventListener("DOMContentLoaded", checkAuth);

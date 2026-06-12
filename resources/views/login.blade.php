@@ -8,32 +8,40 @@
 
 <body class="bg-gray-100 flex items-center justify-center h-screen">
 
-<div class="bg-white p-6 rounded shadow w-80">
+<form id="loginForm" class="bg-white p-6 rounded shadow w-80">
     <h2 class="text-xl font-bold mb-4 text-center">Login</h2>
 
-    <input id="login" type="text" placeholder="Usuário ou Email"
+    <input id="login" name="login" type="text" placeholder="Usuário ou Email"
+        autocomplete="username"
         class="w-full border p-2 mb-3 rounded">
 
-    <input id="password" type="password" placeholder="Senha"
+    <input id="password" name="password" type="password" placeholder="Senha"
+        autocomplete="current-password"
         class="w-full border p-2 mb-4 rounded">
 
-    <button onclick="login()"
+    <button type="submit"
         class="w-full bg-green-500 text-white p-2 rounded">
         Entrar
     </button>
 
     <p id="error" class="text-red-500 text-sm mt-2 hidden"></p>
-</div>
+</form>
 
 <script>
-async function login() {
-    const login = document.getElementById("login").value;
+document.getElementById("loginForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const login = document.getElementById("login").value.trim();
     const password = document.getElementById("password").value;
+
+    const err = document.getElementById("error");
+    err.classList.add("hidden");
+    err.innerText = "";
 
     try {
         const res = await fetch('/api/login', {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
@@ -42,21 +50,31 @@ async function login() {
 
         const data = await res.json();
 
+        console.log("LOGIN STATUS:", res.status);
+        console.log("LOGIN DATA:", data);
+
         if (!res.ok) {
             throw new Error(data.message || 'Login inválido');
         }
 
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
+        if (!data.token) {
+            throw new Error("API não retornou token");
+        }
 
-        window.location.href = "/";
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user || {}));
+
+        console.log("TOKEN SALVO:", localStorage.getItem("token"));
+
+        window.location.assign("/");
 
     } catch (e) {
-        const err = document.getElementById("error");
+        console.error("ERRO LOGIN:", e);
+
         err.innerText = e.message || "Login inválido";
         err.classList.remove("hidden");
     }
-}
+});
 </script>
 
 </body>

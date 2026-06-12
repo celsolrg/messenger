@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Campanhas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-slate-100">
+
+<div class="max-w-7xl mx-auto p-6">
+
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800">Campanhas</h1>
+            <p class="text-sm text-slate-500">Criar, visualizar, editar, copiar e excluir campanhas</p>
+        </div>
+
+        <a href="/" class="bg-slate-700 text-white px-4 py-2 rounded-lg hover:bg-slate-800">
+            Dashboard
+        </a>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-5 mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <h2 id="formTitle" class="text-lg font-bold">Nova campanha</h2>
+
+            <button id="cancelEditBtn"
+                    onclick="cancelEditCampaignPage()"
+                    class="hidden bg-slate-500 hover:bg-slate-600 text-white px-4 py-2 rounded-lg">
+                Cancelar edição
+            </button>
+        </div>
+
+        <input id="campaignName"
+               placeholder="Nome da campanha"
+               class="border rounded-lg p-3 w-full mb-3">
+
+        <select id="campaignType"
+                onchange="toggleMediaInput()"
+                class="border rounded-lg p-3 w-full mb-3">
+            <option value="text">Somente texto</option>
+            <option value="image">Texto + imagem</option>
+            <option value="video">Texto + vídeo</option>
+            <option value="audio">Texto + áudio</option>
+            <option value="document">Texto + documento</option>
+        </select>
+
+        <div id="mediaBox" class="hidden mb-3">
+            <label class="block text-sm text-slate-600 mb-1">
+                Arquivo da campanha
+            </label>
+
+            <div id="currentMediaInfo" class="hidden text-sm text-slate-600 mb-2 bg-slate-50 border rounded-lg p-2"></div>
+
+            <input id="campaignMedia"
+                   type="file"
+                   class="border rounded-lg p-3 w-full bg-white">
+        </div>
+
+        <textarea id="campaignMessage"
+                  placeholder="Mensagem. Exemplo: Olá @{{name}}, tudo bem?"
+                  class="border rounded-lg p-3 w-full mb-3"></textarea>
+
+        <button id="saveCampaignBtn"
+                onclick="saveCampaignPage()"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold">
+            Criar campanha
+        </button>
+
+        <div id="campaignResult" class="mt-3 text-sm"></div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-slate-800 text-white">
+            <tr>
+                <th class="p-3 text-left">Nome</th>
+                <th class="p-3 text-left">Tipo</th>
+                <th class="p-3 text-left">Mensagem</th>
+                <th class="p-3 text-left">Arquivo</th>
+                <th class="p-3 text-center">Ações</th>
+            </tr>
+            </thead>
+
+            <tbody id="campaignsTable">
+            <tr>
+                <td colspan="5" class="p-4 text-center text-slate-500">
+                    Carregando campanhas...
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+let editingCampaignId = null;
+let editingCampaignHasMedia = false;
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function toggleMediaInput() {
+    const type = document.getElementById("campaignType").value;
+    const mediaBox = document.getElementById("mediaBox");
+    const mediaInput = document.getElementById("campaignMedia");
+    const currentMediaInfo = document.getElementById("currentMediaInfo");
+
+    if (type === "text") {
+        mediaBox.classList.add("hidden");
+        mediaInput.value = "";
+        mediaInput.removeAttribute("accept");
+        currentMediaInfo.classList.add("hidden");
+        currentMediaInfo.innerHTML = "";
+        return;
+    }
+
+    mediaBox.classList.remove("hidden");
+
+    if (editingCampaignId && editingCampaignHasMedia) {
+        currentMediaInfo.classList.remove("hidden");
+    } else {
+        currentMediaInfo.classList.add("hidden");
+    }
+
+    if (type === "image") {
+        mediaInput.setAttribute("accept", "image/*");
+    } else if (type === "video") {
+        mediaInput.setAttribute("accept", "video/*");
+    } else if (type === "audio") {
+        mediaInput.setAttribute("accept", "audio/*");
+    } else if (type === "document") {
+        mediaInput.setAttribute("accept", ".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv");
+    }
+}
+
+async function loadCampaignsPage() {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+        window.location.href = "/login";
+        return;
+    }
+
+    const tbody = document.getElementById("campaignsTable");
+
+    const res = await fetch("/api/campaigns", {
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json"
+        }
+    });
+
+    if (res.status === 401) {
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+        return;
+    }
+
+    if (!res.ok) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="p-4 text-center text-red-600">
+                    Erro ao carregar campanhas.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const campaigns = await res.json();
+
+    if (!campaigns.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="p-4 text-center text-slate-500">
+                    Nenhuma campanha encontrada.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = "";
+
+    campaigns.forEach(c => {
+        const media = c.media && c.media.length > 0 ? c.media[0] : null;
+        const campaignJson = encodeURIComponent(JSON.stringify(c));
+
+        tbody.innerHTML += `
+            <tr class="border-b hover:bg-slate-50">
+                <td class="p-3 font-semibold">${escapeHtml(c.name || "-")}</td>
+                <td class="p-3">${escapeHtml(formatCampaignType(c.type))}</td>
+                <td class="p-3">${escapeHtml(c.message || "-")}</td>
+                <td class="p-3">${media ? escapeHtml(media.file_name) : "-"}</td>
+                <td class="p-3 text-center">
+                    <div class="flex gap-2 justify-center flex-wrap">
+                        <button onclick="editCampaignPage('${campaignJson}')"
+                                class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded">
+                            Editar
+                        </button>
+
+                        <button onclick="copyCampaignPage(${c.id})"
+                                class="bg-slate-600 hover:bg-slate-700 text-white px-3 py-1 rounded">
+                            Copiar
+                        </button>
+
+                        <button onclick="deleteCampaignPage(${c.id})"
+                                class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">
+                            Excluir
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+async function saveCampaignPage() {
+    const token = localStorage.getItem("token");
+
+    const name = document.getElementById("campaignName").value.trim();
+    const type = document.getElementById("campaignType").value;
+    const message = document.getElementById("campaignMessage").value;
+    const media = document.getElementById("campaignMedia").files[0];
+    const result = document.getElementById("campaignResult");
+
+    result.innerHTML = "";
+
+    if (!name) {
+        result.innerHTML = `<span class="text-red-600">Informe o nome da campanha.</span>`;
+        return;
+    }
+
+    if (type !== "text" && !media && !editingCampaignHasMedia) {
+        result.innerHTML = `<span class="text-red-600">Selecione o arquivo da campanha.</span>`;
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("type", type);
+    formData.append("message", message);
+
+    if (media) {
+        formData.append("media", media);
+    }
+
+    let url = "/api/campaigns";
+    let successMessage = "Campanha criada com sucesso.";
+
+    if (editingCampaignId) {
+        url = `/api/campaigns/${editingCampaignId}`;
+        formData.append("_method", "PUT");
+        successMessage = "Campanha atualizada com sucesso.";
+    }
+
+    const res = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json"
+        },
+        body: formData
+    });
+
+    if (!res.ok) {
+        let errorMessage = "Erro ao salvar campanha.";
+
+        try {
+            const errorJson = await res.json();
+
+            if (errorJson.message) {
+                errorMessage = errorJson.message;
+            }
+
+            if (errorJson.errors) {
+                const firstError = Object.values(errorJson.errors)[0];
+                if (firstError && firstError[0]) {
+                    errorMessage = firstError[0];
+                }
+            }
+        } catch (e) {
+            errorMessage = await res.text();
+        }
+
+        result.innerHTML = `<span class="text-red-600">${escapeHtml(errorMessage)}</span>`;
+        return;
+    }
+
+    resetCampaignForm();
+    result.innerHTML = `<span class="text-green-700">${successMessage}</span>`;
+
+    loadCampaignsPage();
+}
+
+function editCampaignPage(encodedCampaign) {
+    const campaign = JSON.parse(decodeURIComponent(encodedCampaign));
+    const media = campaign.media && campaign.media.length > 0 ? campaign.media[0] : null;
+
+    editingCampaignId = campaign.id;
+    editingCampaignHasMedia = !!media;
+
+    document.getElementById("formTitle").innerText = "Editar campanha";
+    document.getElementById("saveCampaignBtn").innerText = "Salvar alterações";
+    document.getElementById("cancelEditBtn").classList.remove("hidden");
+
+    document.getElementById("campaignName").value = campaign.name || "";
+    document.getElementById("campaignType").value = campaign.type || "text";
+    document.getElementById("campaignMessage").value = campaign.message || "";
+    document.getElementById("campaignMedia").value = "";
+
+    const currentMediaInfo = document.getElementById("currentMediaInfo");
+
+    if (media) {
+        currentMediaInfo.innerHTML = `Arquivo atual: <strong>${escapeHtml(media.file_name)}</strong><br><span class="text-xs">Selecione outro arquivo apenas se desejar substituir.</span>`;
+    } else {
+        currentMediaInfo.innerHTML = "";
+    }
+
+    toggleMediaInput();
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelEditCampaignPage() {
+    resetCampaignForm();
+    document.getElementById("campaignResult").innerHTML = "";
+}
+
+function resetCampaignForm() {
+    editingCampaignId = null;
+    editingCampaignHasMedia = false;
+
+    document.getElementById("formTitle").innerText = "Nova campanha";
+    document.getElementById("saveCampaignBtn").innerText = "Criar campanha";
+    document.getElementById("cancelEditBtn").classList.add("hidden");
+
+    document.getElementById("campaignName").value = "";
+    document.getElementById("campaignMessage").value = "";
+    document.getElementById("campaignType").value = "text";
+    document.getElementById("campaignMedia").value = "";
+
+    document.getElementById("currentMediaInfo").classList.add("hidden");
+    document.getElementById("currentMediaInfo").innerHTML = "";
+
+    toggleMediaInput();
+}
+
+async function copyCampaignPage(id) {
+    if (!confirm("Deseja copiar esta campanha?")) {
+        return;
+    }
+
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`/api/campaigns/${id}/copy`, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json"
+        }
+    });
+
+    if (!res.ok) {
+        alert("Erro ao copiar campanha.");
+        return;
+    }
+
+    loadCampaignsPage();
+}
+
+async function deleteCampaignPage(id) {
+    if (!confirm("Deseja excluir esta campanha?")) {
+        return;
+    }
+
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`/api/campaigns/${id}`, {
+        method: "DELETE",
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json"
+        }
+    });
+
+    if (!res.ok) {
+        alert("Erro ao excluir campanha.");
+        return;
+    }
+
+    loadCampaignsPage();
+}
+
+function formatCampaignType(type) {
+    const types = {
+        text: "Texto",
+        image: "Texto + imagem",
+        video: "Texto + vídeo",
+        audio: "Texto + áudio",
+        document: "Texto + documento"
+    };
+
+    return types[type] || type || "-";
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    toggleMediaInput();
+    loadCampaignsPage();
+});
+</script>
+
+</body>
+</html>

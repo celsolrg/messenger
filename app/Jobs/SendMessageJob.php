@@ -3,54 +3,51 @@
 namespace App\Jobs;
 
 use App\Models\Message;
+use App\Services\EvolutionService;
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Throwable;
 
 class SendMessageJob implements ShouldQueue
 {
-    use Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected int $messageId;
+    public int $messageId;
 
     public function __construct(int $messageId)
     {
         $this->messageId = $messageId;
     }
 
-    public function handle(): void
+    public function handle(EvolutionService $evolution): void
     {
-        $message = Message::find($this->messageId);
+        $message = Message::with(['campaign', 'contact'])->find($this->messageId);
 
         if (!$message) {
             return;
         }
 
-        if ($message->status === 'sent') {
-            return;
-        }
-
         try {
-            $message->update([
-                'status' => 'processing',
-                'error' => null,
-            ]);
+            $phone = $message->phone;
 
-            /*
-             * Aqui entra o envio real pelo WhatsApp.
-             * Por enquanto, vamos simular sucesso.
-             */
+            if (!$phone && $message->contact) {
+                $phone = $message->contact->ddd . $message->contact->telefone;
+            }
 
-            sleep(rand(1, 3));
+            if (!$phone) {
+                throw new \Exception('Telefone vazio para envio.');
+            }
+
+            $evolution->sendText($phone, $message->message);
 
             $message->update([
                 'status' => 'sent',
-                'sent_at' => now(),
                 'error' => null,
+                'sent_at' => now(),
             ]);
-
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             $message->update([
                 'status' => 'failed',
                 'error' => $e->getMessage(),

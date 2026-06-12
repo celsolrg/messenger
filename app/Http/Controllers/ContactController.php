@@ -10,9 +10,26 @@ use Throwable;
 
 class ContactController extends Controller
 {
+    private function userId(Request $request): ?int
+    {
+        return optional($request->user())->id ?? auth()->id();
+    }
+
+    public function create()
+    {
+        return view('contacts.create');
+    }
+
     public function index(Request $request)
     {
-        $q = Contact::where('user_id', auth()->id());
+
+	$userId = $this->userId($request);
+
+	if (!$userId) {
+	    return response()->json(['message' => 'Não autenticado.'], 401);
+	}
+
+	$q = Contact::where('user_id', $userId);
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -25,7 +42,7 @@ class ContactController extends Controller
             });
         }
 
-        return $q->latest()->get();
+	return $q->with('phones')->latest()->get();
     }
 
     public function store(Request $request)
@@ -53,14 +70,20 @@ class ContactController extends Controller
             'ativo' => ['nullable', 'boolean'],
         ]);
 
-        $data['user_id'] = auth()->id();
+	$userId = $this->userId($request);
+
+	if (!$userId) {
+	    return response()->json(['message' => 'Não autenticado.'], 401);
+	}
+
+	$data['user_id'] = $userId;
         $data['opt_in'] = $data['opt_in'] ?? true;
         $data['ativo'] = $data['ativo'] ?? true;
 
         return Contact::updateOrCreate(
             [
                 'phone' => $data['phone'],
-                'user_id' => auth()->id(),
+		'user_id' => $userId,
             ],
             $data
         );
@@ -131,11 +154,11 @@ class ContactController extends Controller
                     'data_inclusao' => $this->parseDateTime($this->cell($row, $map, 'dt_inclusao')),
                     'opt_in' => true,
                     'ativo' => true,
-                    'user_id' => auth()->id(),
+                    'user_id' => $userId,
                 ];
 
                 $contact = Contact::where('phone', $phone)
-                    ->where('user_id', auth()->id())
+                    ->where('user_id', $userId)
                     ->first();
 
                 if ($contact) {
@@ -163,25 +186,90 @@ class ContactController extends Controller
         ]);
     }
 
-    public function update(Request $request, $id)
-    {
-        $contact = Contact::where('user_id', auth()->id())->findOrFail($id);
+	public function update(Request $request, $id)
+	{
+	    $userId = $this->userId($request);
 
-        $data = $request->validate([
-            'name' => ['nullable', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:255'],
-            'opt_in' => ['nullable', 'boolean'],
-            'ativo' => ['nullable', 'boolean'],
-        ]);
+	    $contact = Contact::where('user_id', $userId)
+	        ->where('id', $id)
+	        ->first();
 
-        $contact->update($data);
+	    if (!$contact) {
+	        return response()->json(['message' => 'Contato não encontrado.'], 404);
+	    }
 
-        return $contact;
-    }
+	    $data = $request->validate([
+	        'name' => ['nullable', 'string', 'max:255'],
+	        'cpf' => ['nullable', 'string', 'max:14'],
+	        'email' => ['nullable', 'email', 'max:255'],
+	        'phone' => ['nullable', 'string', 'max:30'],
+	        'ddd' => ['nullable', 'string', 'max:5'],
+	        'tipo_telefone' => ['nullable', 'string', 'max:50'],
+	        'cidade' => ['nullable', 'string', 'max:255'],
+	        'uf' => ['nullable', 'string', 'max:2'],
+	        'bairro' => ['nullable', 'string', 'max:255'],
+	        'address' => ['nullable', 'string', 'max:255'],
+	        'cep' => ['nullable', 'string', 'max:12'],
+	    ]);
+
+	    $cpf = isset($data['cpf']) ? preg_replace('/\D/', '', $data['cpf']) : null;
+	    $ddd = isset($data['ddd']) ? preg_replace('/\D/', '', $data['ddd']) : null;
+	    $phone = isset($data['phone']) ? preg_replace('/\D/', '', $data['phone']) : null;
+
+	    if ($cpf) {
+	        $exists = Contact::where('user_id', auth()->id())
+	            ->where('cpf', $cpf)
+	            ->where('id', '!=', $contact->id)
+	            ->exists();
+
+	        if ($exists) {
+	            return response()->json([
+	                'message' => 'Já existe outro contato com este CPF.'
+	            ], 422);
+	        }
+	    }
+
+	    $contact->update([
+	        'name' => $data['name'] ?? $contact->name,
+	        'cpf' => $cpf ?: null,
+	        'email' => $data['email'] ?? null,
+	        'ddd' => $ddd,
+	        'phone' => $phone ?: $contact->phone,
+	        'tipo_telefone' => $data['tipo_telefone'] ?? null,
+	        'cidade' => $data['cidade'] ?? null,
+	        'uf' => $data['uf'] ?? null,
+	        'bairro' => $data['bairro'] ?? null,
+	        'address' => $data['address'] ?? null,
+	        'cep' => $data['cep'] ?? null,
+	    ]);
+
+	    if ($phone) {
+	        $contact->phones()->updateOrCreate(
+	            [
+	                'ddd' => $ddd,
+	                'telefone' => $phone,
+	            ],
+	            [
+	                'tipo_telefone' => $data['tipo_telefone'] ?? null,
+	                'whatsapp' => true,
+	                'principal' => true,
+	            ]
+	        );
+
+	        $contact->phones()
+	            ->where('telefone', '!=', $phone)
+	            ->update(['principal' => false]);
+	    }
+
+	    return response()->json([
+	        'message' => 'Contato atualizado com sucesso.',
+	        'contact' => $contact->load('phones'),
+	    ]);
+	}
 
     public function destroy($id)
     {
-        $contact = Contact::where('user_id', auth()->id())->findOrFail($id);
+        $contact = Contact::where('user_id', $userId)->findOrFail($id);
         $contact->delete();
 
         return response()->json([
