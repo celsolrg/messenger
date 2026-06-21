@@ -41,13 +41,30 @@ class Contact extends Model
         'ativo' => 'boolean',
     ];
 
-	public function phones()
-	{
-	    return $this->hasMany(\App\Models\ContactPhone::class);
-	}
+    public function phones()
+    {
+        return $this->hasMany(\App\Models\ContactPhone::class);
+    }
 
-	public function mainPhone()
-	{
-	    return $this->hasOne(\App\Models\ContactPhone::class)->where('principal', true);
-	}
+    public function mainPhone()
+    {
+        return $this->hasOne(\App\Models\ContactPhone::class)
+            ->where('principal', true);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | HISTÓRICO DE ENVIOS
+    |--------------------------------------------------------------------------
+    */
+
+    public function campaignSendContacts()
+    {
+        return $this->hasMany(CampaignSendContact::class);
+    }
+
+    public function messages()
+    {
+        return $this->hasMany(Message::class);
+    }
 }

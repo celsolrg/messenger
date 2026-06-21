@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContactImportController;
 use App\Http\Controllers\WhatsappConnectionController;
+use App\Http\Controllers\CampaignSendPageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -68,3 +69,12 @@ Route::post('/whatsapp/create', [WhatsappConnectionController::class, 'create'])
 
 Route::get('/whatsapp/qrcode', [WhatsappConnectionController::class, 'qrcode'])
     ->name('whatsapp.qrcode');
+
+
+/*
+|--------------------------------------------------------------------------
+| Rotas envios
+|--------------------------------------------------------------------------
+*/
+Route::get('/envios', [CampaignSendPageController::class, 'index'])
+    ->name('campaign-sends.page');
