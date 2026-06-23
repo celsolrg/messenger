@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\CampaignSendController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -13,6 +14,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', function (Request $request) {
         return $request->user();
     });
+
+    Route::get('/campaign-sends', [CampaignSendController::class, 'index']);
+    Route::post('/campaign-sends', [CampaignSendController::class, 'store']);
+    Route::get('/campaign-sends/{campaignSend}', [CampaignSendController::class,  'show']);
 
     Route::get('/contacts', [ContactController::class, 'index']);
     Route::post('/contacts', [ContactController::class, 'store']);

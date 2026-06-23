@@ -13,6 +13,11 @@ class Campaign extends Model
         'user_id',
     ];
 
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function media()
     {
         return $this->hasMany(CampaignMedia::class);
@@ -21,5 +26,15 @@ class Campaign extends Model
     public function messages()
     {
         return $this->hasMany(Message::class);
+    }
+
+    public function sends()
+    {
+        return $this->hasMany(CampaignSend::class);
+    }
+
+    public function sendContacts()
+    {
+        return $this->hasMany(CampaignSendContact::class);
     }
 }
