@@ -241,6 +241,8 @@ class ContactController extends Controller
 	        'bairro' => $data['bairro'] ?? null,
 	        'address' => $data['address'] ?? null,
 	        'cep' => $data['cep'] ?? null,
+            'tag' => $data['tag'] ?? null,
+            'ativo' => $data['ativo'] ?? $contact->ativo,
 	    ]);
 
 	    if ($phone) {

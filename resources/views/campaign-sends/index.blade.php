@@ -38,27 +38,52 @@
                     </select>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-semibold mb-1">Mínimo</label>
-                        <input id="min_delay_seconds" type="number" value="20" min="5" class="w-full border rounded-lg px-3 py-2">
-                    </div>
+                <div class="border rounded-xl p-4 bg-slate-50">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3">Público</h3>
 
                     <div>
-                        <label class="block text-sm font-semibold mb-1">Máximo</label>
-                        <input id="max_delay_seconds" type="number" value="60" min="5" class="w-full border rounded-lg px-3 py-2">
+                        <label class="block text-sm font-semibold mb-1">Enviar para</label>
+                        <select id="target_type" class="w-full border rounded-lg px-3 py-2" onchange="toggleTargetValue()">
+                            <option value="all">Todos os contatos ativos</option>
+                            <option value="tag">TAG</option>
+                            <option value="state">Estado</option>
+                            <option value="city">Cidade</option>
+                            <option value="ddd">DDD</option>
+                        </select>
+                    </div>
+
+                    <div id="targetValueBox" class="mt-3 hidden">
+                        <label id="targetValueLabel" class="block text-sm font-semibold mb-1">Valor</label>
+                        <input id="target_value" type="text" class="w-full border rounded-lg px-3 py-2" placeholder="">
+                        <p id="targetValueHelp" class="text-xs text-slate-500 mt-1"></p>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-semibold mb-1">Pausar a cada</label>
-                        <input id="pause_every" type="number" value="20" min="1" class="w-full border rounded-lg px-3 py-2">
+                <div class="border rounded-xl p-4 bg-slate-50">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3">Controle de velocidade</h3>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Mínimo seg.</label>
+                            <input id="min_delay_seconds" type="number" value="20" min="5" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Máximo seg.</label>
+                            <input id="max_delay_seconds" type="number" value="60" min="5" class="w-full border rounded-lg px-3 py-2">
+                        </div>
                     </div>
 
-                    <div>
-                        <label class="block text-sm font-semibold mb-1">Pausa seg.</label>
-                        <input id="pause_seconds" type="number" value="300" min="0" class="w-full border rounded-lg px-3 py-2">
+                    <div class="grid grid-cols-2 gap-3 mt-3">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Pausar a cada</label>
+                            <input id="pause_every" type="number" value="20" min="1" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Pausa seg.</label>
+                            <input id="pause_seconds" type="number" value="300" min="0" class="w-full border rounded-lg px-3 py-2">
+                        </div>
                     </div>
                 </div>
 
@@ -93,6 +118,49 @@ if (!token) {
     window.location.href = '/login';
 }
 
+function toggleTargetValue() {
+    const type = document.getElementById('target_type').value;
+    const box = document.getElementById('targetValueBox');
+    const label = document.getElementById('targetValueLabel');
+    const input = document.getElementById('target_value');
+    const help = document.getElementById('targetValueHelp');
+
+    input.value = '';
+
+    if (type === 'all') {
+        box.classList.add('hidden');
+        input.required = false;
+        return;
+    }
+
+    box.classList.remove('hidden');
+    input.required = true;
+
+    if (type === 'tag') {
+        label.innerText = 'TAG';
+        input.placeholder = 'Ex: clientes, vip, importacao-junho';
+        help.innerText = 'Envia apenas para contatos com essa TAG.';
+    }
+
+    if (type === 'state') {
+        label.innerText = 'Estado / UF';
+        input.placeholder = 'Ex: MT, RO, SP';
+        help.innerText = 'Use a sigla do estado cadastrada no contato.';
+    }
+
+    if (type === 'city') {
+        label.innerText = 'Cidade';
+        input.placeholder = 'Ex: Cuiabá';
+        help.innerText = 'Digite a cidade exatamente como está nos contatos.';
+    }
+
+    if (type === 'ddd') {
+        label.innerText = 'DDD';
+        input.placeholder = 'Ex: 65';
+        help.innerText = 'Digite apenas o DDD, sem parênteses.';
+    }
+}
+
 document.getElementById('sendForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
@@ -100,8 +168,13 @@ document.getElementById('sendForm').addEventListener('submit', async function(e)
     msg.innerHTML = 'Criando envio...';
     msg.className = 'text-sm text-slate-600';
 
+    const targetType = document.getElementById('target_type').value;
+    const targetValue = document.getElementById('target_value').value.trim();
+
     const payload = {
         campaign_id: document.getElementById('campaign_id').value,
+        target_type: targetType,
+        target_value: targetType === 'all' ? null : targetValue,
         min_delay_seconds: Number(document.getElementById('min_delay_seconds').value || 20),
         max_delay_seconds: Number(document.getElementById('max_delay_seconds').value || 60),
         pause_every: Number(document.getElementById('pause_every').value || 20),
@@ -136,6 +209,19 @@ document.getElementById('sendForm').addEventListener('submit', async function(e)
     }
 });
 
+function targetLabel(send) {
+    const type = send.target_type || 'all';
+    const value = send.target_value || '';
+
+    if (type === 'all') return 'Todos os contatos ativos';
+    if (type === 'tag') return `TAG: ${value}`;
+    if (type === 'state') return `Estado: ${value}`;
+    if (type === 'city') return `Cidade: ${value}`;
+    if (type === 'ddd') return `DDD: ${value}`;
+
+    return type;
+}
+
 async function loadSends() {
     const box = document.getElementById('sendsList');
     box.innerHTML = '<p class="text-slate-500 text-sm">Carregando...</p>';
@@ -165,10 +251,13 @@ async function loadSends() {
 
             return `
                 <div class="border rounded-xl p-4">
-                    <div class="flex justify-between items-start mb-2">
+                    <div class="flex justify-between items-start mb-2 gap-4">
                         <div>
                             <div class="font-bold text-slate-800">
                                 #${send.id} - ${send.campaign?.name ?? 'Campanha removida'}
+                            </div>
+                            <div class="text-xs text-slate-500">
+                                Público: <strong>${targetLabel(send)}</strong>
                             </div>
                             <div class="text-xs text-slate-500">
                                 Status: <strong>${send.status}</strong>
@@ -202,6 +291,11 @@ async function loadSends() {
                             <div class="text-xs text-slate-500">Falhas</div>
                         </div>
                     </div>
+
+                    <div class="text-xs text-slate-500 mt-3">
+                        Intervalo: ${send.min_delay_seconds ?? 20}s a ${send.max_delay_seconds ?? 60}s |
+                        Pausa a cada ${send.pause_every ?? 20} mensagens por ${send.pause_seconds ?? 300}s
+                    </div>
                 </div>
             `;
         }).join('');
@@ -211,6 +305,7 @@ async function loadSends() {
     }
 }
 
+toggleTargetValue();
 loadSends();
 setInterval(loadSends, 10000);
 </script>

@@ -63,8 +63,7 @@
                 <th class="p-3 text-center">Ações</th>
             </tr>
             </thead>
-
-            <tbody id="contactsTable">
+             <tbody id="contactsTable">
             <tr>
                 <td colspan="7" class="p-4 text-center text-slate-500">
                     Carregando contatos...
@@ -137,6 +136,11 @@
                 <div>
                     <label class="text-sm text-slate-600">CEP</label>
                     <input id="editContactCep" class="w-full border rounded-lg px-3 py-2">
+                </div>
+
+                <div>
+                    <label class="text-sm text-slate-600">Tag</label>
+                    <input id="editContactTag" class="w-full border rounded-lg px-3 py-2">
                 </div>
 
                 <div>
@@ -252,10 +256,19 @@ async function loadContactsPage() {
                             ? '<span class="text-green-700 font-semibold">Sim</span>'
                             : '<span class="text-red-700 font-semibold">Não</span>'}
                     </td>
+
                     <td class="p-3 text-center">
-                        <button onclick="openEditContactModal(${c.id})" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
-                            Editar
-                        </button>
+                        <div class="flex justify-center gap-2">
+                            <button onclick="openEditContactModal(${c.id})"
+                                class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                                Editar
+                            </button>
+
+                            <button onclick="deleteContact(${c.id})"
+                                class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">
+                                Excluir
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -307,6 +320,7 @@ function openEditContactModal(id) {
     setValue("editContactBairro", c.bairro || "");
     setValue("editContactAddress", c.address || "");
     setValue("editContactCep", c.cep || "");
+    setValue("editContactTag", c.tag || "");
     setValue("editContactAtivo", c.ativo == 1 ? "1" : "0");
 
     document.getElementById("editContactModal").classList.remove("hidden");
@@ -321,18 +335,19 @@ async function saveContactEdit() {
     const id = value("editContactId");
 
     const payload = {
-        name: value("editContactName"),
-        cpf: value("editContactCpf"),
-        ddd: value("editContactDdd"),
-        phone: value("editContactPhone"),
-        email: value("editContactEmail"),
-        cidade: value("editContactCidade"),
-        uf: value("editContactUf"),
-        bairro: value("editContactBairro"),
-        address: value("editContactAddress"),
-        cep: value("editContactCep"),
-        ativo: value("editContactAtivo")
-    };
+    name: value("editContactName"),
+    cpf: value("editContactCpf"),
+    ddd: value("editContactDdd"),
+    phone: value("editContactPhone"),
+    email: value("editContactEmail"),
+    cidade: value("editContactCidade"),
+    uf: value("editContactUf"),
+    bairro: value("editContactBairro"),
+    address: value("editContactAddress"),
+    cep: value("editContactCep"),
+    tag: value("editContactTag"),
+    ativo: value("editContactAtivo") === "1" ? true : false
+};
 
     const res = await fetch("/api/contacts/" + id, {
         method: "PUT",
@@ -356,6 +371,37 @@ async function saveContactEdit() {
 
     alert("Contato atualizado com sucesso.");
 }
+
+    async function deleteContact(id) {
+        if (!confirm("Deseja realmente excluir este contato?")) {
+            return;
+        }
+
+        const token = getToken();
+
+        const res = await fetch("/api/contacts/" + id, {
+            method: "DELETE",
+            headers: {
+                "Authorization": "Bearer " + token,
+                "Accept": "application/json"
+            }
+        });
+
+        if (res.status === 401) {
+            localStorage.removeItem("token");
+            window.location.href = "/login";
+            return;
+        }
+
+        if (!res.ok) {
+            alert("Erro ao excluir contato.");
+            return;
+        }
+
+        await loadContactsPage();
+
+        alert("Contato excluído com sucesso.");
+    }
 
 document.addEventListener("DOMContentLoaded", loadContactsPage);
 
