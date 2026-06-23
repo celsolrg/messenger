@@ -1,4 +1,6 @@
 let contacts = [];
+let contactsCurrentPage = 1;
+let contactsLastPage = 1;
 
 // =========================
 // HELPERS
@@ -15,7 +17,7 @@ function setValue(id, value) {
 }
 
 function clearFields(ids) {
-    ids.forEach(id => {
+    ids.forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.value = "";
     });
@@ -27,7 +29,7 @@ function getContactName(c) {
 
 function getPrimaryPhone(c) {
     if (c.phones && c.phones.length) {
-        const principal = c.phones.find(p => p.principal);
+        const principal = c.phones.find((p) => p.principal);
         return principal || c.phones[0];
     }
 
@@ -58,14 +60,46 @@ function getContactUf(c) {
     return c.uf || c.estado || "";
 }
 
+function getContactFilters() {
+    const params = new URLSearchParams();
+
+    params.append("page", contactsCurrentPage);
+    params.append("per_page", getValue("filterPerPage") || "50");
+
+    const filters = {
+        search: getValue("filterSearch"),
+        cidade: getValue("filterCidade"),
+        estado: getValue("filterEstado"),
+        tag: getValue("filterTag"),
+        opt_in: getValue("filterOptIn"),
+        ativo: getValue("filterAtivo"),
+        has_phone: getValue("filterHasPhone"),
+    };
+
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value !== "") {
+            params.append(key, value);
+        }
+    });
+
+    return params.toString();
+}
+
 // =========================
 // LOAD / RENDER
 // =========================
 
-async function loadContacts() {
-    contacts = await api("/contacts");
+async function loadContacts(page = 1) {
+    contactsCurrentPage = page;
+
+    const response = await api("/contacts?" + getContactFilters());
+
+    contacts = response.data || [];
+    contactsCurrentPage = response.current_page || 1;
+    contactsLastPage = response.last_page || 1;
 
     renderContacts();
+    renderContactsPagination(response);
 
     if (typeof updateDashboardCards === "function") {
         updateDashboardCards();
@@ -82,25 +116,29 @@ function renderContacts() {
     if (!contacts.length) {
         container.innerHTML = `
             <div class="text-sm text-slate-500 bg-slate-50 border rounded-lg p-4">
-                Nenhum contato cadastrado ainda.
+                Nenhum contato encontrado.
             </div>
         `;
         return;
     }
 
-    contacts.forEach(c => {
+    contacts.forEach((c) => {
         const div = document.createElement("div");
 
-        div.className = "flex justify-between items-center border border-slate-200 p-3 rounded-lg bg-slate-50";
+        div.className =
+            "flex justify-between items-center border border-slate-200 p-3 rounded-lg bg-slate-50";
 
         div.innerHTML = `
             <div>
                 <strong>${getContactName(c)}</strong><br>
+
                 <small class="text-slate-500">
                     CPF: ${c.cpf || "-"} | Tel: ${getContactPhone(c)}
                 </small><br>
+
                 <small class="text-slate-400">
                     ${c.cidade || ""} ${getContactUf(c) || ""}
+                    ${c.tag ? " | Tag: " + c.tag : ""}
                 </small>
             </div>
 
@@ -121,6 +159,105 @@ function renderContacts() {
     });
 }
 
+function renderContactsPagination(response) {
+    const info = document.getElementById("contactsPaginationInfo");
+    const controls = document.getElementById("contactsPaginationControls");
+
+    if (info) {
+        info.innerHTML = `
+            Mostrando <strong>${response.from || 0}</strong> até
+            <strong>${response.to || 0}</strong> de
+            <strong>${response.total || 0}</strong> contatos
+        `;
+    }
+
+    if (!controls) return;
+
+    controls.innerHTML = `
+        <div class="flex flex-wrap items-center gap-2 mt-4">
+            <button onclick="loadContacts(1)"
+                ${contactsCurrentPage === 1 ? "disabled" : ""}
+                class="px-3 py-2 bg-slate-200 rounded disabled:opacity-50">
+                Primeira
+            </button>
+
+            <button onclick="loadContacts(${contactsCurrentPage - 1})"
+                ${contactsCurrentPage === 1 ? "disabled" : ""}
+                class="px-3 py-2 bg-slate-200 rounded disabled:opacity-50">
+                Anterior
+            </button>
+
+            <span class="text-sm text-slate-600">
+                Página <strong>${contactsCurrentPage}</strong> de <strong>${contactsLastPage}</strong>
+            </span>
+
+            <button onclick="loadContacts(${contactsCurrentPage + 1})"
+                ${contactsCurrentPage === contactsLastPage ? "disabled" : ""}
+                class="px-3 py-2 bg-slate-200 rounded disabled:opacity-50">
+                Próxima
+            </button>
+
+            <button onclick="loadContacts(${contactsLastPage})"
+                ${contactsCurrentPage === contactsLastPage ? "disabled" : ""}
+                class="px-3 py-2 bg-slate-200 rounded disabled:opacity-50">
+                Última
+            </button>
+
+            <input id="goToPageInput"
+                type="number"
+                min="1"
+                max="${contactsLastPage}"
+                placeholder="Página"
+                class="border rounded px-3 py-2 w-24">
+
+            <button onclick="goToContactPage()"
+                class="px-3 py-2 bg-slate-700 text-white rounded">
+                Ir
+            </button>
+        </div>
+    `;
+}
+
+// =========================
+// FILTERS
+// =========================
+
+function applyContactFilters() {
+    loadContacts(1);
+}
+
+function clearContactFilters() {
+    [
+        "filterSearch",
+        "filterCidade",
+        "filterEstado",
+        "filterTag",
+        "filterOptIn",
+        "filterAtivo",
+        "filterHasPhone",
+    ].forEach((id) => setValue(id, ""));
+
+    setValue("filterPerPage", "50");
+
+    loadContacts(1);
+}
+
+function goToContactPage() {
+    const page = parseInt(getValue("goToPageInput"));
+
+    if (!page || page < 1) {
+        loadContacts(1);
+        return;
+    }
+
+    if (page > contactsLastPage) {
+        loadContacts(contactsLastPage);
+        return;
+    }
+
+    loadContacts(page);
+}
+
 // =========================
 // CREATE MANUAL
 // =========================
@@ -136,7 +273,7 @@ async function createContact() {
         estado: getValue("contactEstado"),
         tag: getValue("contactTag"),
         opt_in: true,
-        ativo: true
+        ativo: true,
     };
 
     if (!payload.name || !payload.phone) {
@@ -146,7 +283,7 @@ async function createContact() {
 
     await api("/contacts", {
         method: "POST",
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
     });
 
     clearFields([
@@ -156,10 +293,10 @@ async function createContact() {
         "contactCpf",
         "contactCidade",
         "contactEstado",
-        "contactTag"
+        "contactTag",
     ]);
 
-    await loadContacts();
+    await loadContacts(contactsCurrentPage);
 
     alert("Contato cadastrado com sucesso!");
 }
@@ -169,7 +306,7 @@ async function createContact() {
 // =========================
 
 function openEditContact(id) {
-    const contact = contacts.find(c => c.id === id);
+    const contact = contacts.find((c) => c.id === id);
 
     if (!contact) {
         alert("Contato não encontrado.");
@@ -213,9 +350,10 @@ async function updateContact() {
         email: getValue("editContactEmail"),
         cidade: getValue("editContactCidade"),
         uf: getValue("editContactEstado"),
+        estado: getValue("editContactEstado"),
         bairro: getValue("editContactBairro"),
         address: getValue("editContactAddress"),
-        cep: getValue("editContactCep")
+        cep: getValue("editContactCep"),
     };
 
     if (!payload.name || !payload.phone) {
@@ -225,11 +363,11 @@ async function updateContact() {
 
     await api("/contacts/" + id, {
         method: "PUT",
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
     });
 
     closeEditContact();
-    await loadContacts();
+    await loadContacts(contactsCurrentPage);
 
     alert("Contato atualizado com sucesso!");
 }
@@ -252,14 +390,14 @@ async function importContacts(csv) {
                 name: nome?.trim() || null,
                 phone: telefone.trim(),
                 opt_in: true,
-                ativo: true
-            })
+                ativo: true,
+            }),
         });
     }
 
     clearFields(["csvInput"]);
 
-    await loadContacts();
+    await loadContacts(1);
 }
 
 // =========================
@@ -287,10 +425,10 @@ async function importExcelContacts() {
     const res = await fetch("/api/contacts/import-excel", {
         method: "POST",
         headers: {
-            "Authorization": "Bearer " + token,
-            "Accept": "application/json"
+            Authorization: "Bearer " + token,
+            Accept: "application/json",
         },
-        body: formData
+        body: formData,
     });
 
     const data = await res.json();
@@ -306,17 +444,14 @@ async function importExcelContacts() {
     if (result) {
         result.innerHTML = `
             <div class="text-emerald-700">
-                ${data.message}<br>
-                Criados: <strong>${data.created}</strong> |
-                Atualizados: <strong>${data.updated}</strong> |
-                Ignorados: <strong>${data.ignored}</strong>
+                ${data.message || "Importação concluída."}
             </div>
         `;
     }
 
     input.value = "";
 
-    await loadContacts();
+    await loadContacts(1);
 }
 
 // =========================
@@ -327,10 +462,10 @@ async function deleteContact(id) {
     if (!confirm("Deseja remover este contato?")) return;
 
     await api("/contacts/" + id, {
-        method: "DELETE"
+        method: "DELETE",
     });
 
-    await loadContacts();
+    await loadContacts(contactsCurrentPage);
 }
 
 // =========================
@@ -338,6 +473,8 @@ async function deleteContact(id) {
 // =========================
 
 document.addEventListener("DOMContentLoaded", () => {
+    loadContacts();
+
     const btnImport = document.getElementById("btnImport");
     const btnExcel = document.getElementById("btnImportExcel");
     const btnCreate = document.getElementById("btnCreateContact");
@@ -398,5 +535,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 alert(e.message);
             }
         };
+    }
+
+    const filterSearch = document.getElementById("filterSearch");
+
+    if (filterSearch) {
+        filterSearch.addEventListener("keyup", (event) => {
+            if (event.key === "Enter") {
+                applyContactFilters();
+            }
+        });
     }
 });

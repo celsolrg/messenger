@@ -22,27 +22,89 @@ class ContactController extends Controller
 
     public function index(Request $request)
     {
+        $userId = $this->userId($request);
 
-	$userId = $this->userId($request);
+        if (!$userId) {
+            return response()->json(['message' => 'Não autenticado.'], 401);
+        }
 
-	if (!$userId) {
-	    return response()->json(['message' => 'Não autenticado.'], 401);
-	}
+        $perPage = (int) $request->get('per_page', 50);
 
-	$q = Contact::where('user_id', $userId);
+        if ($perPage < 10) {
+            $perPage = 10;
+        }
+
+        if ($perPage > 200) {
+            $perPage = 200;
+        }
+
+        $q = Contact::where('user_id', $userId)->with('phones');
 
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = trim($request->search);
 
             $q->where(function ($w) use ($search) {
                 $w->where('name', 'like', "%{$search}%")
-                  ->orWhere('cpf', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%")
-                  ->orWhere('cidade', 'like', "%{$search}%");
+                    ->orWhere('nome', 'like', "%{$search}%")
+                    ->orWhere('cpf', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('telefone', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('cidade', 'like', "%{$search}%");
             });
         }
 
-	return $q->with('phones')->latest()->get();
+        if ($request->filled('cidade')) {
+            $q->where('cidade', 'like', '%' . trim($request->cidade) . '%');
+        }
+
+        if ($request->filled('estado')) {
+            $estado = strtoupper(trim($request->estado));
+
+            $q->where(function ($w) use ($estado) {
+                $w->where('estado', $estado)
+                    ->orWhere('uf', $estado);
+            });
+        }
+
+        if ($request->filled('tag')) {
+            $q->where('tag', 'like', '%' . trim($request->tag) . '%');
+        }
+
+        if ($request->filled('opt_in')) {
+            $q->where('opt_in', (int) $request->opt_in);
+        }
+
+        if ($request->filled('ativo')) {
+            $q->where('ativo', (int) $request->ativo);
+        }
+
+        if ($request->filled('has_phone')) {
+            if ((int) $request->has_phone === 1) {
+                $q->where(function ($w) {
+                    $w->whereNotNull('phone')
+                        ->where('phone', '<>', '')
+                        ->orWhere(function ($w2) {
+                            $w2->whereNotNull('telefone')
+                                ->where('telefone', '<>', '');
+                        });
+                });
+            }
+
+            if ((int) $request->has_phone === 0) {
+                $q->where(function ($w) {
+                    $w->where(function ($w2) {
+                        $w2->whereNull('phone')
+                            ->orWhere('phone', '');
+                    })->where(function ($w3) {
+                        $w3->whereNull('telefone')
+                            ->orWhere('telefone', '');
+                    });
+                });
+            }
+        }
+
+        return $q->latest()->paginate($perPage);
     }
 
     public function store(Request $request)
@@ -70,214 +132,210 @@ class ContactController extends Controller
             'ativo' => ['nullable', 'boolean'],
         ]);
 
-	$userId = $this->userId($request);
+        $userId = $this->userId($request);
 
-	if (!$userId) {
-	    return response()->json(['message' => 'Não autenticado.'], 401);
-	}
+        if (!$userId) {
+            return response()->json(['message' => 'Não autenticado.'], 401);
+        }
 
-	$data['user_id'] = $userId;
+        $data['user_id'] = $userId;
         $data['opt_in'] = $data['opt_in'] ?? true;
         $data['ativo'] = $data['ativo'] ?? true;
 
         return Contact::updateOrCreate(
             [
                 'phone' => $data['phone'],
-		'user_id' => $userId,
+                'user_id' => $userId,
             ],
             $data
         );
     }
 
-    public function importExcel(Request $request)
-    {
-        $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls,csv'],
-        ]);
+public function importExcel(Request $request)
+{
+    $request->validate([
+        'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt'],
+    ]);
 
-        $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
+    @ini_set('memory_limit', '1024M');
+    @set_time_limit(0);
+
+    $file = $request->file('file')->getRealPath();
+
+    $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($file);
+    $reader->setReadDataOnly(true);
+
+    $spreadsheetInfo = $reader->listWorksheetInfo($file);
+    $totalRows = $spreadsheetInfo[0]['totalRows'];
+
+    $chunkSize = 500;
+    $imported = 0;
+
+    for ($startRow = 2; $startRow <= $totalRows; $startRow += $chunkSize) {
+        $chunkFilter = new \App\Imports\ChunkReadFilter($startRow, $chunkSize);
+        $reader->setReadFilter($chunkFilter);
+
+        $spreadsheet = $reader->load($file);
         $sheet = $spreadsheet->getActiveSheet();
-        $rows = $sheet->toArray(null, true, true, true);
 
-        if (count($rows) < 2) {
-            return response()->json([
-                'message' => 'Planilha vazia ou sem dados.',
-            ], 400);
-        }
+        foreach ($sheet->getRowIterator($startRow, min($startRow + $chunkSize - 1, $totalRows)) as $row) {
+            $rowIndex = $row->getRowIndex();
 
-        $header = array_shift($rows);
+            $nome = trim((string) $sheet->getCell("A{$rowIndex}")->getValue());
+            $telefone = preg_replace('/\D/', '', (string) $sheet->getCell("B{$rowIndex}")->getValue());
+            $email = trim((string) $sheet->getCell("C{$rowIndex}")->getValue());
+            $cpf = preg_replace('/\D/', '', (string) $sheet->getCell("D{$rowIndex}")->getValue());
+            $cidade = trim((string) $sheet->getCell("E{$rowIndex}")->getValue());
+            $estado = trim((string) $sheet->getCell("F{$rowIndex}")->getValue());
+            $tag = trim((string) $sheet->getCell("G{$rowIndex}")->getValue());
 
-        $map = [];
-        foreach ($header as $col => $name) {
-            $key = $this->normalizeHeader($name);
-            if ($key) {
-                $map[$key] = $col;
+            if (!$nome && !$telefone) {
+                continue;
             }
-        }
 
-        $created = 0;
-        $updated = 0;
-        $ignored = 0;
-        $errors = [];
-
-        foreach ($rows as $index => $row) {
-            try {
-                $externalId = $this->cell($row, $map, 'contatos_id');
-                $cpf = $this->onlyDigits($this->cell($row, $map, 'cpf'));
-                $name = $this->cell($row, $map, 'nome');
-                $ddd = $this->onlyDigits($this->cell($row, $map, 'ddd'));
-                $telefone = $this->onlyDigits($this->cell($row, $map, 'telefone'));
-
-                if (!$telefone) {
-                    $ignored++;
-                    continue;
-                }
-
-                $phone = $this->formatPhone($ddd, $telefone);
-
-                $payload = [
-                    'external_id' => $externalId,
+            \App\Models\Contact::updateOrCreate(
+                [
+                    'user_id' => auth()->id(),
+                    'telefone' => $telefone,
+                ],
+                [
+                    'nome' => $nome ?: null,
+                    'telefone' => $telefone ?: null,
+                    'email' => $email ?: null,
                     'cpf' => $cpf ?: null,
-                    'name' => $name ?: null,
-                    'phone' => $phone,
-                    'ddd' => $ddd ?: null,
-                    'tipo_telefone' => $this->cell($row, $map, 'tipo_telefone'),
-                    'sexo' => $this->cell($row, $map, 'sexo'),
-                    'bairro' => $this->cell($row, $map, 'bairro'),
-                    'cidade' => $this->cell($row, $map, 'cidade'),
-                    'uf' => $this->cell($row, $map, 'uf'),
-                    'cep' => $this->onlyDigits($this->cell($row, $map, 'cep')),
-                    'data_nascimento' => $this->parseDate($this->cell($row, $map, 'nasc')),
-                    'nome_mae' => $this->cell($row, $map, 'nome_mae'),
-                    'renda' => $this->parseMoney($this->cell($row, $map, 'renda')),
-                    'titulo_eleitor' => $this->cell($row, $map, 'titulo_eleitor'),
-                    'data_inclusao' => $this->parseDateTime($this->cell($row, $map, 'dt_inclusao')),
+                    'cidade' => $cidade ?: null,
+                    'estado' => $estado ?: null,
+                    'tag' => $tag ?: null,
                     'opt_in' => true,
                     'ativo' => true,
-                    'user_id' => $userId,
-                ];
+                ]
+            );
 
-                $contact = Contact::where('phone', $phone)
-                    ->where('user_id', $userId)
-                    ->first();
-
-                if ($contact) {
-                    $contact->update($payload);
-                    $updated++;
-                } else {
-                    Contact::create($payload);
-                    $created++;
+            $imported++;
                 }
 
-            } catch (Throwable $e) {
-                $errors[] = [
-                    'linha' => $index + 2,
-                    'erro' => $e->getMessage(),
-                ];
+                $spreadsheet->disconnectWorksheets();
+                unset($spreadsheet, $sheet);
+                gc_collect_cycles();
             }
+
+            return response()->json([
+                'message' => "Importação concluída. {$imported} contatos processados.",
+            ]);
         }
 
-        return response()->json([
-            'message' => 'Importação concluída.',
-            'created' => $created,
-            'updated' => $updated,
-            'ignored' => $ignored,
-            'errors' => $errors,
-        ]);
-    }
+        public function update(Request $request, $id)
+        {
+            $userId = $this->userId($request);
 
-	public function update(Request $request, $id)
-	{
-	    $userId = $this->userId($request);
+            if (!$userId) {
+                return response()->json(['message' => 'Não autenticado.'], 401);
+            }
 
-	    $contact = Contact::where('user_id', $userId)
-	        ->where('id', $id)
-	        ->first();
+            $contact = Contact::where('user_id', $userId)
+                ->where('id', $id)
+                ->first();
 
-	    if (!$contact) {
-	        return response()->json(['message' => 'Contato não encontrado.'], 404);
-	    }
+            if (!$contact) {
+                return response()->json(['message' => 'Contato não encontrado.'], 404);
+                    }
 
-	    $data = $request->validate([
-	        'name' => ['nullable', 'string', 'max:255'],
-	        'cpf' => ['nullable', 'string', 'max:14'],
-	        'email' => ['nullable', 'email', 'max:255'],
-	        'phone' => ['nullable', 'string', 'max:30'],
-	        'ddd' => ['nullable', 'string', 'max:5'],
-	        'tipo_telefone' => ['nullable', 'string', 'max:50'],
-	        'cidade' => ['nullable', 'string', 'max:255'],
-	        'uf' => ['nullable', 'string', 'max:2'],
-	        'bairro' => ['nullable', 'string', 'max:255'],
-	        'address' => ['nullable', 'string', 'max:255'],
-	        'cep' => ['nullable', 'string', 'max:12'],
-	    ]);
+            $data = $request->validate([
+                'name' => ['nullable', 'string', 'max:255'],
+                'cpf' => ['nullable', 'string', 'max:14'],
+                'email' => ['nullable', 'email', 'max:255'],
+                'phone' => ['nullable', 'string', 'max:30'],
+                'ddd' => ['nullable', 'string', 'max:5'],
+                'tipo_telefone' => ['nullable', 'string', 'max:50'],
+                'cidade' => ['nullable', 'string', 'max:255'],
+                'uf' => ['nullable', 'string', 'max:2'],
+                'estado' => ['nullable', 'string', 'max:2'],
+                'bairro' => ['nullable', 'string', 'max:255'],
+                'address' => ['nullable', 'string', 'max:255'],
+                'cep' => ['nullable', 'string', 'max:12'],
+                'tag' => ['nullable', 'string', 'max:255'],
+                'opt_in' => ['nullable', 'boolean'],
+                'ativo' => ['nullable', 'boolean'],
+            ]);
 
-	    $cpf = isset($data['cpf']) ? preg_replace('/\D/', '', $data['cpf']) : null;
-	    $ddd = isset($data['ddd']) ? preg_replace('/\D/', '', $data['ddd']) : null;
-	    $phone = isset($data['phone']) ? preg_replace('/\D/', '', $data['phone']) : null;
+            $cpf = isset($data['cpf']) ? preg_replace('/\D/', '', $data['cpf']) : null;
+            $ddd = isset($data['ddd']) ? preg_replace('/\D/', '', $data['ddd']) : null;
+            $phone = isset($data['phone']) ? preg_replace('/\D/', '', $data['phone']) : null;
 
-	    if ($cpf) {
-	        $exists = Contact::where('user_id', auth()->id())
-	            ->where('cpf', $cpf)
-	            ->where('id', '!=', $contact->id)
-	            ->exists();
+            if ($cpf) {
+                $exists = Contact::where('user_id', $userId)
+                    ->where('cpf', $cpf)
+                    ->where('id', '!=', $contact->id)
+                    ->exists();
 
-	        if ($exists) {
-	            return response()->json([
-	                'message' => 'Já existe outro contato com este CPF.'
-	            ], 422);
-	        }
-	    }
+                if ($exists) {
+                    return response()->json([
+                        'message' => 'Já existe outro contato com este CPF.'
+                    ], 422);
+                        }
+                    }
 
-	    $contact->update([
-	        'name' => $data['name'] ?? $contact->name,
-	        'cpf' => $cpf ?: null,
-	        'email' => $data['email'] ?? null,
-	        'ddd' => $ddd,
-	        'phone' => $phone ?: $contact->phone,
-	        'tipo_telefone' => $data['tipo_telefone'] ?? null,
-	        'cidade' => $data['cidade'] ?? null,
-	        'uf' => $data['uf'] ?? null,
-	        'bairro' => $data['bairro'] ?? null,
-	        'address' => $data['address'] ?? null,
-	        'cep' => $data['cep'] ?? null,
-            'tag' => $data['tag'] ?? null,
-            'ativo' => $data['ativo'] ?? $contact->ativo,
-	    ]);
+            $uf = $data['uf'] ?? $data['estado'] ?? $contact->uf;
 
-	    if ($phone) {
-	        $contact->phones()->updateOrCreate(
-	            [
-	                'ddd' => $ddd,
-	                'telefone' => $phone,
-	            ],
-	            [
-	                'tipo_telefone' => $data['tipo_telefone'] ?? null,
-	                'whatsapp' => true,
-	                'principal' => true,
-	            ]
-	        );
+            $contact->update([
+                'name' => $data['name'] ?? $contact->name,
+                'cpf' => $cpf ?: null,
+                'email' => $data['email'] ?? null,
+                'ddd' => $ddd,
+                'phone' => $phone ?: $contact->phone,
+                'tipo_telefone' => $data['tipo_telefone'] ?? null,
+                'cidade' => $data['cidade'] ?? null,
+                'uf' => $uf,
+                'estado' => $data['estado'] ?? $uf,
+                'bairro' => $data['bairro'] ?? null,
+                'address' => $data['address'] ?? null,
+                'cep' => $data['cep'] ?? null,
+                'tag' => $data['tag'] ?? null,
+                'opt_in' => $data['opt_in'] ?? $contact->opt_in,
+                'ativo' => $data['ativo'] ?? $contact->ativo,
+            ]);
 
-	        $contact->phones()
-	            ->where('telefone', '!=', $phone)
-	            ->update(['principal' => false]);
-	    }
+            if ($phone) {
+                $contact->phones()->updateOrCreate(
+                    [
+                        'ddd' => $ddd,
+                        'telefone' => $phone,
+                    ],
+                    [
+                        'tipo_telefone' => $data['tipo_telefone'] ?? null,
+                        'whatsapp' => true,
+                        'principal' => true,
+                    ]
+                );
 
-	    return response()->json([
-	        'message' => 'Contato atualizado com sucesso.',
-	        'contact' => $contact->load('phones'),
-	    ]);
-	}
+                $contact->phones()
+                    ->where('telefone', '!=', $phone)
+                    ->update(['principal' => false]);
+            }
 
-    public function destroy($id)
-    {
-        $contact = Contact::where('user_id', $userId)->findOrFail($id);
-        $contact->delete();
+            return response()->json([
+                'message' => 'Contato atualizado com sucesso.',
+                'contact' => $contact->load('phones'),
+            ]);
+        }
 
-        return response()->json([
-            'message' => 'Contato removido com sucesso.',
-        ]);
-    }
+
+        public function destroy(Request $request, $id)
+        {
+            $userId = optional($request->user())->id ?? auth()->id();
+
+            if (!$userId) {
+                return response()->json(['message' => 'Não autenticado.'], 401);
+            }
+
+            $contact = Contact::where('user_id', $userId)->findOrFail($id);
+
+            $contact->delete();
+
+            return response()->json([
+                'message' => 'Contato removido com sucesso.',
+            ]);
+        }
 
     private function cell(array $row, array $map, string $key): ?string
     {
